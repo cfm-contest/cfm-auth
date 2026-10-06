@@ -13,8 +13,6 @@ ALLOWED_HOSTS = config(
 )
 
 BOT_TOKEN = config("BOT_TOKEN")
-WEBHOOK_SECRET = config("WEBHOOK_SECRET")
-WEBHOOK_URL = config("WEBHOOK_URL")
 
 
 INSTALLED_APPS = [
@@ -60,17 +58,15 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "app.wsgi.application"
 
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": config("POSTGRES_DB"),
         "USER": config("POSTGRES_USER"),
         "PASSWORD": config("POSTGRES_PASSWORD"),
-        "HOST": config("POSTGRES_HOST"),
+        "HOST": config("POSTGRES_HOST", default="localhost"),
         "PORT": config("POSTGRES_PORT", default="5432"),
-        "OPTIONS": {
-            "sslmode": config("POSTGRES_SSLMODE", default="require"),
-        },
         "CONN_MAX_AGE": 600,
     }
 }

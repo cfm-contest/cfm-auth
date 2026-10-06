@@ -1,4 +1,3 @@
-# bot/bot.py
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from django.conf import settings

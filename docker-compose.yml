@@ -1,160 +1,68 @@
-services:
+x-app: &app
+  build:
+    context: ./admin
+  image: cfm-auth-app
+  env_file: .env
+  environment:
+    POSTGRES_HOST: db
+    POSTGRES_PORT: "5432"
+  volumes:
+    - ./admin:/app          # faqat development uchun
+  networks:
+    - cfm_network
+  restart: unless-stopped
 
-  # ==========================================
-  # PostgreSQL
-  # ==========================================
+services:
   db:
     image: postgres:16-alpine
-    container_name: cfm_db_auth
+    container_name: cfm_db
     restart: unless-stopped
-
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
-        ]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 10s
-
     networks:
       - cfm_network
 
-
-  # ==========================================
-  # Redis
-  # ==========================================
-  redis:
-    image: redis:7.2-alpine
-    container_name: cfm_redis_auth
-    restart: unless-stopped
-
-    command:
-      - redis-server
-      - --requirepass
-      - ${REDIS_PASSWORD}
-      - --appendonly
-      - "yes"
-
-    volumes:
-      - redis_data:/data
-
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "redis-cli",
-          "-a",
-          "${REDIS_PASSWORD}",
-          "ping"
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
-    networks:
-      - cfm_network
-
-
-  # ==========================================
-  # Django-Bolt
-  # ==========================================
   web:
-    build:
-      context: ./admin
-      dockerfile: Dockerfile
-
-    container_name: cfm_auth
-    restart: unless-stopped
-
-    env_file:
-      - .env
-
-    environment:
-      # Django
-      DJANGO_SETTINGS_MODULE: app.settings
-
-      # PostgreSQL
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-
-      # Redis
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-
-    volumes:
-      - ./admin:/app
-
+    <<: *app
+    container_name: cfm_web
     ports:
       - "8888:8888"
-
     depends_on:
       db:
         condition: service_healthy
-
-      redis:
-        condition: service_healthy
-
     command:
       - sh
       - -c
       - |
         set -e
-
-        echo "=========================================="
-        echo "Starting Django..."
-        echo "=========================================="
-
-        echo "Waiting for PostgreSQL..."
         python manage.py migrate --noinput
-
-        echo "Collecting static files..."
         python manage.py collectstatic --noinput
+        python manage.py createsuperuser --noinput || true
+        exec python manage.py runbolt --host 0.0.0.0 --port 8888 --processes 2
 
-        echo "Creating superuser..."
-        python manage.py create_superuser || true
-
-        echo "Setting Telegram webhook..."
-        python manage.py setwebhook
-
-        echo "Starting Django-Bolt..."
-        exec python manage.py runbolt \
-          --host 0.0.0.0 \
-          --port 8888 \
-          --processes 4
-
-    networks:
-      - cfm_network
-
-
-# ==========================================
-# Volumes
-# ==========================================
+  bot:
+    <<: *app
+    container_name: cfm_bot
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
+    command: python manage.py runbot
 
 volumes:
   postgres_data:
-    name: cfm_postgres_data
-
-  redis_data:
-    name: cfm_redis_data
-
-
-# ==========================================
-# Network
-# ==========================================
 
 networks:
   cfm_network:
-    name: cfm_network
     driver: bridge
