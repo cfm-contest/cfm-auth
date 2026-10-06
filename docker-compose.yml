@@ -82,6 +82,9 @@ services:
       - .env
 
     environment:
+      # Django
+      DJANGO_SETTINGS_MODULE: app.settings
+
       # PostgreSQL
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
@@ -90,12 +93,9 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
 
-    # Development uchun
-    # Hostdagi admin/ container ichidagi /app bo'ladi
     volumes:
       - ./admin:/app
 
-    # Faqat Django-Bolt tashqariga ochiladi
     ports:
       - "8888:8888"
 
@@ -106,22 +106,34 @@ services:
       redis:
         condition: service_healthy
 
-    # Container ishga tushganda:
-    # 1. makemigrations
-    # 2. migrate
-    # 3. collectstatic
-    # 4. superuser yaratish
-    # 5. Django-Bolt
     command:
       - sh
       - -c
       - |
         set -e
+
+        echo "=========================================="
+        echo "Starting Django..."
+        echo "=========================================="
+
+        echo "Waiting for PostgreSQL..."
         python manage.py migrate --noinput
+
+        echo "Collecting static files..."
         python manage.py collectstatic --noinput
+
+        echo "Creating superuser..."
         python manage.py create_superuser || true
+
+        echo "Setting Telegram webhook..."
         python manage.py setwebhook
-        exec python manage.py runbolt --host 0.0.0.0 --port 8888 --processes 4
+
+        echo "Starting Django-Bolt..."
+        exec python manage.py runbolt \
+          --host 0.0.0.0 \
+          --port 8888 \
+          --processes 4
+
     networks:
       - cfm_network
 
@@ -132,7 +144,10 @@ services:
 
 volumes:
   postgres_data:
+    name: cfm_postgres_data
+
   redis_data:
+    name: cfm_redis_data
 
 
 # ==========================================
@@ -141,4 +156,5 @@ volumes:
 
 networks:
   cfm_network:
+    name: cfm_network
     driver: bridge
